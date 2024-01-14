@@ -1,3 +1,8 @@
+
+# Reason of this fork
+
+This is a modification of the original esptool package to support tasmotizer utility used in [TinyGS project](https://github.com/G4lile0/tinyGS/).
+
 # esptool.py
 
 A Python-based, open-source, platform-independent utility to communicate with the ROM bootloader in Espressif chips.
