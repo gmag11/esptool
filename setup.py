@@ -132,6 +132,7 @@ setup(
         "reedsolo>=1.5.3,<1.8",
         "PyYAML>=5.1",
         "intelhex",
+        "PyQt5>=5.14.2,<6",
     ],
     packages=find_packages(),
     include_package_data=True,

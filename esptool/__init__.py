@@ -74,6 +74,7 @@ from esptool.util import (
     flash_size_bytes,
     strip_chip_name,
 )
+from .loader import sw
 
 import serial
 
@@ -728,10 +729,13 @@ def main(argv=None, esp=None):
         if esp.secure_download_mode:
             print("Chip is %s in Secure Download Mode" % esp.CHIP_NAME)
         else:
-            print("Chip is %s" % (esp.get_chip_description()))
+            chip = esp.get_chip_description()
+            print("Chip is %s" % (chip))
             print("Features: %s" % ", ".join(esp.get_chip_features()))
             print("Crystal is %dMHz" % esp.get_crystal_freq())
-            read_mac(esp, args)
+            mac = read_mac(esp, args)
+            sw.connection_state.emit(f'Connected to {chip} [{mac}]')
+
 
         if not args.no_stub:
             if esp.secure_download_mode:

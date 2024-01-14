@@ -25,6 +25,7 @@ from .loader import (
     ERASE_WRITE_TIMEOUT_PER_MB,
     ESPLoader,
     timeout_per_mb,
+    sw
 )
 from .targets import CHIP_DEFS, CHIP_LIST, ROM_LIST
 from .uf2_writer import UF2Writer
@@ -575,11 +576,12 @@ def write_flash(esp, args):
 
         timeout = DEFAULT_TIMEOUT
 
-        while len(image) > 0:
+        while sw.continueFlag() and len(image) > 0:
             print_overwrite(
                 "Writing at 0x%08x... (%d %%)"
                 % (address + bytes_written, 100 * (seq + 1) // blocks)
             )
+            sw.progress.emit('write', 100 * (seq + 1) // blocks)
             sys.stdout.flush()
             block = image[0 : esp.FLASH_WRITE_SIZE]
             if compress:
@@ -617,41 +619,42 @@ def write_flash(esp, args):
             # so do a final dummy operation which will not be 'ack'ed
             # until the last block has actually been written out to flash
             esp.read_reg(ESPLoader.CHIP_DETECT_MAGIC_REG_ADDR, timeout=timeout)
+ 
+        if sw.continueFlag():
+            t = time.time() - t
+            speed_msg = ""
+            if compress:
+                if t > 0.0:
+                    speed_msg = " (effective %.1f kbit/s)" % (uncsize / t * 8 / 1000)
+                print_overwrite(
+                    "Wrote %d bytes (%d compressed) at 0x%08x in %.1f seconds%s..."
+                    % (uncsize, bytes_sent, address, t, speed_msg),
+                    last_line=True,
+                )
+            else:
+                if t > 0.0:
+                    speed_msg = " (%.1f kbit/s)" % (bytes_written / t * 8 / 1000)
+                print_overwrite(
+                    "Wrote %d bytes at 0x%08x in %.1f seconds%s..."
+                    % (bytes_written, address, t, speed_msg),
+                    last_line=True,
+                )
 
-        t = time.time() - t
-        speed_msg = ""
-        if compress:
-            if t > 0.0:
-                speed_msg = " (effective %.1f kbit/s)" % (uncsize / t * 8 / 1000)
-            print_overwrite(
-                "Wrote %d bytes (%d compressed) at 0x%08x in %.1f seconds%s..."
-                % (uncsize, bytes_sent, address, t, speed_msg),
-                last_line=True,
-            )
-        else:
-            if t > 0.0:
-                speed_msg = " (%.1f kbit/s)" % (bytes_written / t * 8 / 1000)
-            print_overwrite(
-                "Wrote %d bytes at 0x%08x in %.1f seconds%s..."
-                % (bytes_written, address, t, speed_msg),
-                last_line=True,
-            )
-
-        if not encrypted and not esp.secure_download_mode:
-            try:
-                res = esp.flash_md5sum(address, uncsize)
-                if res != calcmd5:
-                    print("File  md5: %s" % calcmd5)
-                    print("Flash md5: %s" % res)
-                    print(
-                        "MD5 of 0xFF is %s"
-                        % (hashlib.md5(b"\xFF" * uncsize).hexdigest())
-                    )
-                    raise FatalError("MD5 of file does not match data in flash!")
-                else:
-                    print("Hash of data verified.")
-            except NotImplementedInROMError:
-                pass
+            if not encrypted and not esp.secure_download_mode:
+                try:
+                    res = esp.flash_md5sum(address, uncsize)
+                    if res != calcmd5:
+                        print("File  md5: %s" % calcmd5)
+                        print("Flash md5: %s" % res)
+                        print(
+                            "MD5 of 0xFF is %s"
+                            % (hashlib.md5(b"\xFF" * uncsize).hexdigest())
+                        )
+                        raise FatalError("MD5 of file does not match data in flash!")
+                    else:
+                        print("Hash of data verified.")
+                except NotImplementedInROMError:
+                    pass
 
     print("\nLeaving...")
 
@@ -1065,10 +1068,13 @@ def erase_flash(esp, args):
                 "Use --force to override, "
                 "please use with caution, otherwise it may brick your device!"
             )
-    print("Erasing flash (this may take a while)...")
-    t = time.time()
-    esp.erase_flash()
-    print("Chip erase completed successfully in %.1fs" % (time.time() - t))
+    if sw.continueFlag():
+        sw.progress.emit('erase', 50)
+        print("Erasing flash (this may take a while)...")
+        t = time.time()
+        esp.erase_flash()
+        print("Chip erase completed successfully in %.1fs" % (time.time() - t))
+        sw.progress.emit('erase', 100)
 
 
 def erase_region(esp, args):

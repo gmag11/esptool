@@ -26,6 +26,27 @@ from .reset import (
 from .util import FatalError, NotImplementedInROMError, UnsupportedCommandError
 from .util import byte, hexify, mask_to_shift, pad_to, strip_chip_name
 
+from PyQt5.QtCore import pyqtSignal, QObject, pyqtSlot
+
+
+class SignalWrapper(QObject):
+
+    connection_state = pyqtSignal(str)
+    progress = pyqtSignal(str, int)
+
+    def __init__(self):
+        super().__init__()
+        self._continue_flag = True
+
+    def continueFlag(self):
+        return self._continue_flag
+
+    def setContinueFlag(self, state):
+        self._continue_flag = state
+
+
+sw = SignalWrapper()
+
 try:
     import serial
 except ImportError:
@@ -668,16 +689,17 @@ class ESPLoader(object):
         print("Connecting...", end="")
         sys.stdout.flush()
         last_error = None
-
+        sw.connection_state[str].emit('Connecting...')
         reset_sequence = self._construct_reset_strategy_sequence(mode)
         try:
             for _, reset_strategy in zip(
                 range(attempts) if attempts > 0 else itertools.count(),
                 itertools.cycle(reset_sequence),
             ):
-                last_error = self._connect_attempt(reset_strategy, mode)
-                if last_error is None:
-                    break
+                if sw.continueFlag():
+                    last_error = self._connect_attempt(reset_strategy, mode)
+                    if last_error is None:
+                        break
         finally:
             print("")  # end 'Connecting...' line
 
@@ -1168,7 +1190,7 @@ class ESPLoader(object):
         )
         # now we expect (length // block_size) SLIP frames with the data
         data = b""
-        while len(data) < length:
+        while sw.continueFlag() and len(data) < length:
             p = self.read()
             data += p
             if len(data) < length and len(p) < self.FLASH_SECTOR_SIZE:
